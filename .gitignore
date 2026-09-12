@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+*.pdf
+*.pptx
+.pytest_cache/
+
+# Node
+node_modules/
+.next/
+out/
+.env.local
+.env*.local
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.log
+
+# Generated
+/tmp/
+*.sqlite
