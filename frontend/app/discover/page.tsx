@@ -130,17 +130,30 @@ export default function DiscoverPage() {
     setStatus("");
     setTaskId("");
     setTaskStatus(null);
+
     try {
-      const res = await fetch(`${API}${endpoint}`, {
+      const res = await apiFetch(endpoint, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const data = await res.json();
-      setTaskId(data.task_id || "");
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(
+          data.detail || data.message || `API request failed (${res.status})`
+        );
+      }
+
+      if (!data.task_id) {
+        throw new Error(
+          data.detail || data.message || "The API did not return a task ID."
+        );
+      }
+
+      setTaskId(data.task_id);
       setStatus(data.status || "started");
     } catch (e) {
-      setStatus("Failed to start – is the API running?");
+      setStatus(e instanceof Error ? e.message : "Failed to start discovery.");
       setLoading(false);
     }
   }
