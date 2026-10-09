@@ -37,6 +37,13 @@ interface Prospect {
     tech?: {
       technologies?: string[];
     };
+    engagement?: {
+      lead_quality_score?: number;
+      lead_quality_level?: string;
+      lead_quality_reasons?: string[];
+      buying_signals?: string[];
+      buying_signal_count?: number;
+    };
   };
   created_at: string;
 }
@@ -740,6 +747,9 @@ export default function ProspectsPage() {
                     Enrichment
                   </th>
                   <th className="text-left p-3">
+                    Buying Signals
+                  </th>
+                  <th className="text-left p-3">
                     Contact
                   </th>
                   <th className="text-left p-3">
@@ -824,6 +834,44 @@ export default function ProspectsPage() {
 
                     <td className="p-3">
                       {enrichmentBadge(p)}
+                    </td>
+                    <td className="p-3 text-xs min-w-48">
+                      {(() => {
+                        const engagement = p.metadata?.engagement;
+                        const signals = engagement?.buying_signals || [];
+                        const quality = engagement?.lead_quality_score;
+                        return (
+                          <div className="space-y-1">
+                            {typeof quality === "number" && (
+                              <div className="font-medium text-cyan-400">
+                                Lead quality: {quality}/100
+                                {engagement?.lead_quality_level
+                                  ? ` ? ${engagement.lead_quality_level}`
+                                  : ""}
+                              </div>
+                            )}
+                            {signals.length > 0 ? (
+                              <div className="flex flex-wrap gap-1">
+                                {signals.map((signal) => (
+                                  <span
+                                    key={signal}
+                                    className="rounded bg-emerald-900/40 px-2 py-1 text-emerald-300"
+                                  >
+                                    {signal.replace(/_/g, " ")}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-slate-600">No buying signals detected</span>
+                            )}
+                            {engagement?.lead_quality_reasons?.length ? (
+                              <div className="text-slate-500">
+                                {engagement.lead_quality_reasons.slice(0, 3).join(" ? ")}
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td className="p-3 text-xs">
                       {p.email || p.phone ? (
