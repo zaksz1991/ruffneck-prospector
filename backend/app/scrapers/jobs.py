@@ -640,6 +640,95 @@ class JobBoardScraper(BaseScraper):
         )
         return engagement
 
+    def _score_lead_quality(
+        self,
+        engagement: dict,
+        item: CommentResult,
+        title: str = "",
+        description: str = "",
+    ) -> dict:
+        """Score how useful a job listing is as a potential business lead."""
+        data = dict(engagement or {})
+        score = 0
+        reasons = []
+
+        query_level = str(data.get("query_intent_level") or "low").lower()
+        job_level = str(data.get("job_intent_level") or "low").lower()
+
+        if query_level == "high":
+            score += 35
+            reasons.append("Strong job-title match")
+        elif query_level == "medium":
+            score += 22
+            reasons.append("Relevant job evidence")
+        elif job_level == "high":
+            score += 25
+            reasons.append("Relevant service-related job title")
+        elif job_level == "medium":
+            score += 15
+            reasons.append("Service mentioned in job description")
+
+        categories = data.get("matching_service_categories") or []
+        if not categories and data.get("job_intent_category"):
+            categories = [data["job_intent_category"]]
+
+        category_count = len(set(str(c) for c in categories if c))
+        if category_count:
+            points = min(15, category_count * 5)
+            score += points
+            reasons.append(f"{category_count} matching service categor{'y' if category_count == 1 else 'ies'}")
+
+        company = str(
+            data.get("job_company") or item.display_name or ""
+        ).strip()
+        if company and company.casefold() not in {"unknown", "n/a", "none"}:
+            score += 10
+            reasons.append("Company identified")
+
+        job_url = str(item.post_url or "").strip()
+        profile_url = str(item.profile_url or "").strip()
+        if job_url.startswith(("https://", "http://")):
+            score += 10
+            reasons.append("Job listing link available")
+        elif profile_url.startswith(("https://", "http://")):
+            score += 5
+            reasons.append("Listing or company link available")
+
+        description_length = len(str(description or "").strip())
+        if description_length >= 600:
+            score += 15
+            reasons.append("Detailed job description")
+        elif description_length >= 250:
+            score += 10
+            reasons.append("Useful job description")
+        elif description_length >= 80:
+            score += 5
+            reasons.append("Some job details available")
+
+        location = str(
+            data.get("job_location") or item.bio_text or ""
+        ).strip()
+        if location and location.casefold() not in {"unknown", "n/a", "none"}:
+            score += 5
+            reasons.append("Location information available")
+
+        score = min(100, score)
+        if score >= 75:
+            quality = "high"
+        elif score >= 55:
+            quality = "good"
+        elif score >= 35:
+            quality = "moderate"
+        else:
+            quality = "low"
+
+        data.update({
+            "lead_quality_score": score,
+            "lead_quality_level": quality,
+            "lead_quality_reasons": reasons,
+        })
+        return data
+
     def scrape_comments(self, target_url: str, keywords: Optional[List[str]] = None) -> List[CommentResult]:
         """Collect and rank job-board records for one board or many queries.
 
@@ -873,7 +962,12 @@ class JobBoardScraper(BaseScraper):
                         score = intent_rank(level)
                         query_index = len(requested_queries)
 
-                    item.engagement = engagement
+                    item.engagement = self._score_lead_quality(
+                        engagement=engagement,
+                        item=item,
+                        title=str(title or ""),
+                        description=str(full_description or ""),
+                    )
                     dedupe_key = canonical_job_key(item)
                     candidate = {
                         "item": item,
@@ -941,6 +1035,7 @@ class JobBoardScraper(BaseScraper):
                 for category in categories:
                     category_pools[category].sort(
                         key=lambda candidate: (
+                            -int((candidate["item"].engagement or {}).get("lead_quality_score", 0)),
                             board_order.get(candidate["board"], 999),
                             candidate["query_index"],
                         )
