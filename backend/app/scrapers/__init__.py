@@ -72,14 +72,33 @@ def discover_service_leads(
     service: str,
     extra_keywords: Optional[List[str]] = None,
     max_results: int = 30,
+    location: str = "Nigeria",
 ) -> List[CommentResult]:
     """
-    Free Google/DuckDuckGo discovery for:
-    - Digital service niches (website, marketing, AI, …)
-    - Any product or service demand online (service='custom' + keywords)
+    Free Google/DuckDuckGo discovery for service-intent leads.
+
+    extra_keywords are additional search terms.
+    They are not interpreted as the location argument.
     """
     scraper = GoogleSearchScraper(max_results=max_results)
-    return scraper.search_service_leads(service, extra_keywords or [])
+
+    # USED_ITEMS_QUERY_BUDGET_V1
+    # Used-item demand is unusually social/marketplace-heavy.
+    # Give it a larger search budget without increasing the runtime
+    # of every other Service Intent category.
+    query_budget = (
+        40
+        if str(service or "").strip().lower() == "used_items"
+        else 6
+    )
+
+    return scraper.search_service_leads(
+        service,
+        location=(location or "Nigeria").strip(),
+        extra_keywords=extra_keywords or [],
+        max_results=max_results,
+        max_queries=query_budget,
+    )
 
 
 def discover_product_demand(
@@ -100,3 +119,5 @@ def discover_competitors(
 ) -> List[CommentResult]:
     scraper = CompetitorScraper(max_results=max_results)
     return scraper.discover(seed, location=location, category=category)
+
+

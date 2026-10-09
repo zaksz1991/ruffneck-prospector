@@ -26,8 +26,14 @@ def notify(
             "metadata": metadata or {},
             "read": False,
         }).execute()
-    except Exception as e:
-        logger.warning(f"notify failed: {e}")
+    except Exception:
+        logger.exception(
+            "Notification insert failed "
+            f"type={type!r} title={title!r} "
+            f"prospect_id={prospect_id!r} "
+            f"workspace_id={workspace_id!r} "
+            f"user_email={user_email!r}"
+        )
 
 
 def list_notifications(sb, limit: int = 30, unread_only: bool = False) -> List[Dict[str, Any]]:

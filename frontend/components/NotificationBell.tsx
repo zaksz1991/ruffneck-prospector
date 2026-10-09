@@ -22,7 +22,7 @@ export default function NotificationBell() {
 
   useEffect(() => {
     load();
-    const t = setInterval(load, 60000);
+    const t = setInterval(load, 15000);
     return () => clearInterval(t);
   }, []);
 
@@ -38,7 +38,11 @@ export default function NotificationBell() {
   return (
     <div className="relative">
       <button
-        onClick={() => { setOpen(!open); }}
+        onClick={() => {
+          const nextOpen = !open;
+          setOpen(nextOpen);
+          if (nextOpen) load();
+        }}
         className="relative text-slate-400 hover:text-white text-sm px-2 py-1"
         title="Notifications"
       >

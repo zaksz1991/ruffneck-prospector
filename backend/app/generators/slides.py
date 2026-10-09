@@ -3,7 +3,7 @@ Simple PowerPoint generator using python-pptx (free).
 """
 from pptx import Presentation
 from pptx.util import Inches, Pt
-from pptx.dml.color import RgbColor
+from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN
 from typing import Dict, Any
 import os

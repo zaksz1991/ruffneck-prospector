@@ -116,13 +116,20 @@ def verify_email(email: str) -> Dict[str, Any]:
             result.update({"valid": False, "status": "undeliverable", "confidence": 90})
             return result
         if res == "risky":
-            result.update({"valid": True, "status": "risky", "confidence": 50})
+            # Risky means the mailbox is not sufficiently verified.
+            result.update({"valid": False, "status": "risky", "confidence": 50})
             return result
 
-    # Local pass: syntax + MX
+    # Local pass: syntax + MX confirms only that the domain
+    # can receive mail. It does NOT confirm that this
+    # specific mailbox exists.
     result.update({
-        "valid": True,
-        "status": "ok",
-        "confidence": 65,  # moderate without external verifier
+        "valid": False,
+        "status": "unknown",
+        "confidence": 40,
+        "details": {
+            **result.get("details", {}),
+            "verification_scope": "domain_only",
+        },
     })
     return result

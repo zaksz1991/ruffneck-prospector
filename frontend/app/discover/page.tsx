@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import NotificationBell from "../../components/NotificationBell";
 import WorkspaceSwitcher from "../../components/WorkspaceSwitcher";
@@ -11,23 +11,53 @@ import Link from "next/link";
 
 const SERVICES = [
   { key: "website", label: "Website / Web Dev" },
+  { key: "software_app", label: "Software / App Development" },
   { key: "digital_marketing", label: "Digital Marketing" },
+  { key: "social_media_management", label: "Social Media Management" },
+  { key: "graphics", label: "Graphics Design / Branding" },
+  { key: "content_creation", label: "Content Creation" },
+  { key: "events_creative", label: "Events / Photo / Video" },
+
   { key: "ai_solution", label: "AI Solutions" },
-  { key: "graphics", label: "Graphics Design" },
-  { key: "cv_resume", label: "CV / Resume" },
+  { key: "ai_automation", label: "Business / Workflow Automation" },
+  { key: "ai_data_annotation", label: "AI Data Annotation / Evaluation" },
+  { key: "ai_content_writing", label: "AI Content Writing" },
+  { key: "ai_video_creation", label: "AI Video Creation" },
+  { key: "ai_training", label: "AI & Digital Training" },
+
+  { key: "it_support", label: "IT / Technical Support" },
+  { key: "computer_setup", label: "Computer Setup / Repair" },
+  { key: "microsoft_office", label: "Microsoft Office / Excel Support" },
+  { key: "network_support", label: "Network / Wi-Fi / Printer Support" },
+  { key: "web_hosting", label: "Web Hosting / Domain / Maintenance" },
+  { key: "ecommerce", label: "E-commerce / Online Store Development" },
+
+  { key: "data_management", label: "Data Management / Data Analysis" },
   { key: "excel", label: "Excel / Data Cleaning" },
-  { key: "any_product_service", label: "Any product / service (general demand)" },
-  { key: "buying_intent", label: "Buying intent (looking to buy)" },
-  { key: "hiring_services", label: "Hiring / freelancers needed" },
-  { key: "local_services", label: "Local services near me" },
-  { key: "b2b_suppliers", label: "B2B suppliers / wholesale" },
-  { key: "coaching_consulting", label: "Coaching / consulting" },
-  { key: "health_wellness", label: "Health & wellness" },
-  { key: "education_training", label: "Education / training" },
-  { key: "home_services", label: "Home services (plumber, etc.)" },
-  { key: "events_creative", label: "Events / photo / video" },
-  { key: "finance_legal", label: "Finance / legal / accounting" },
-  { key: "custom", label: "Custom product or service (type below)" },
+  { key: "data_entry", label: "Data Entry / Data Processing" },
+  { key: "transcription", label: "Transcription / Audio-to-Text" },
+
+  { key: "virtual_assistant", label: "Virtual Assistant / Administrative Support" },
+  { key: "business_operations", label: "Business Operations Support" },
+  { key: "customer_support", label: "Customer Support" },
+  { key: "logistics_warehousing", label: "Logistics / Warehousing Support" },
+
+  { key: "cv_resume", label: "CV / Resume" },
+  { key: "coaching_consulting", label: "Coaching / Consulting" },
+  { key: "education_training", label: "Education / Training" },
+  { key: "health_wellness", label: "Health & Wellness" },
+  { key: "herbal_islamic_medicine", label: "Herbal / Islamic Medicine" },
+  { key: "home_services", label: "Home Services (plumber, etc.)" },
+  { key: "finance_legal", label: "Finance / Legal / Accounting" },
+
+  { key: "sales_lead_generation", label: "Sales / Lead Generation / Business Development" },
+  { key: "b2b_suppliers", label: "B2B Suppliers / Wholesale" },
+  { key: "hiring_services", label: "Hiring / Freelancers Needed" },
+  { key: "local_services", label: "Local Services Near Me" },
+  { key: "buying_intent", label: "Buying Intent (Looking to Buy)" },
+  { key: "used_items", label: "Used / Second-hand Items" },
+  { key: "any_product_service", label: "Any Product / Service (General Demand)" },
+  { key: "custom", label: "Custom Product or Service (Type Below)" },
 ];
 
 const JOB_BOARDS = [
@@ -119,7 +149,7 @@ export default function DiscoverPage() {
     e.preventDefault();
     runSearch(
       { location: location || "", services: null },
-      "/api/discover/daily"
+      "/api/discovery/daily"
     );
   }
 
@@ -227,7 +257,7 @@ export default function DiscoverPage() {
         {/* Tabs */}
         <div className="flex flex-wrap gap-2 mb-8">
           {[
-            { id: "daily", label: "⚡ Daily Discovery" },
+            { id: "daily", label: "Daily Discovery" },
             { id: "service", label: "Service Intent" },
             { id: "linkedin", label: "LinkedIn" },
             { id: "jobs", label: "Job Boards" },
@@ -255,12 +285,11 @@ export default function DiscoverPage() {
             <div>
               <h3 className="text-lg font-semibold mb-1">One-Click Daily Discovery</h3>
               <p className="text-sm text-slate-400 mb-4">
-                Automatically runs service intent searches (all 6 services), LinkedIn intent, 
-                free job boards, and optional local Maps — then saves + enriches leads.
+                Automatically runs service intent searches (8 service types), LinkedIn intent, free job boards, and optional local Maps - then saves leads. Enrichment runs separately.
               </p>
             </div>
             <div>
-              <label className="block text-sm text-slate-400 mb-1">Location (optional – improves Maps + local relevance)</label>
+              <label className="block text-sm text-slate-400 mb-1">Location (optional - improves Maps + local relevance)</label>
               <input
                 value={location}
                 onChange={(e) => setLocation(e.target.value)}
@@ -273,7 +302,7 @@ export default function DiscoverPage() {
               disabled={loading}
               className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-50 py-3.5 rounded-lg font-semibold text-base"
             >
-              {loading ? "Running Daily Discovery…" : "🚀 Run Daily Discovery"}
+              {loading ? "Running Daily Discovery..." : "Run Daily Discovery"}
             </button>
           </form>
         )}
@@ -538,7 +567,7 @@ export default function DiscoverPage() {
                   </pre>
                 )}
                 <p className="mt-3">
-                  <Link href="/prospects" className="text-blue-400 underline">View prospects →</Link>
+                  <Link href="/prospects" className="text-blue-400 underline">View prospects</Link>
                 </p>
               </div>
             )}
@@ -554,3 +583,7 @@ export default function DiscoverPage() {
     </div>
   );
 }
+
+
+
+
