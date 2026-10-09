@@ -1,0 +1,109 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+*.pdf
+*.pptx
+.pytest_cache/
+
+# Node
+node_modules/
+.next/
+out/
+.env.local
+.env*.local
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.log
+
+# Generated
+/tmp/
+*.sqlite
+
+# Environment secrets
+.env.*
+!.env.example
+!.env.sample
+
+# Credentials and private keys
+*.pem
+*.key
+credentials.json
+service-account*.json
+
+# Local databases and generated data
+*.db
+*.sqlite3
+data/
+logs/
+
+# Build artifacts
+dist/
+build/
+coverage/
+
+# Frontend dependencies and build output
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# Environment files
+.env
+.env.*
+!.env.example
+!.env.sample
+frontend/.env.local
+frontend/.env.local.*
+!frontend/.env.local.example
+
+# Python virtual environments
+backend/.venv/
+backend/venv/
+
+# Runtime data and logs
+backend/storage/
+logs/
+
+
+# Celery runtime state
+backend/celerybeat-schedule
+celerybeat-schedule
+celerybeat-schedule.*
+
+# Temporary editor and patch artifacts
+*-Pattern
+*.tmp
+*.temp
+*.orig
+
+# Additional backup files
+*.BROKEN-BACKUP
+*.before-*
+*.bak
+*.bak2
+*.original
+*.backup
+
+# Exclude all backup and patch-history files
+*.bak*
+*.backup*
+*.original
+*.BROKEN-BACKUP
+*.before*
+*.orig
+*.tmp
+*.temp
+
+# Exclude accidental temporary root file
+/-Pattern
+
+# Exclude Celery runtime state
+backend/celerybeat-schedule*
+celerybeat-schedule*
