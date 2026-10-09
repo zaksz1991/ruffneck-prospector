@@ -1056,6 +1056,7 @@ class JobBoardScraper(BaseScraper):
                     category_pools[category].sort(
                         key=lambda candidate: (
                             -int((candidate["item"].engagement or {}).get("lead_quality_score", 0)),
+                            -int((candidate["item"].engagement or {}).get("buying_signal_count", 0)),
                             board_order.get(candidate["board"], 999),
                             candidate["query_index"],
                         )
