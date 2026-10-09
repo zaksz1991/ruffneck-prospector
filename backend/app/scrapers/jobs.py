@@ -1,6 +1,6 @@
-﻿import re
+import re
 """
-Free job-board scrapers â€“ expanded.
+Free job-board scrapers – expanded.
 Sources (all free/public):
 - RemoteOK (public JSON)
 - We Work Remotely
@@ -13,7 +13,7 @@ Used to surface companies hiring for roles that signal need for digital services
 from typing import List, Optional
 import logging
 import requests
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, parse_qsl, urlencode, urlsplit, urlunsplit
 from .base import BaseScraper, CommentResult
 
 logger = logging.getLogger(__name__)
@@ -641,18 +641,19 @@ class JobBoardScraper(BaseScraper):
         return engagement
 
     def scrape_comments(self, target_url: str, keywords: Optional[List[str]] = None) -> List[CommentResult]:
-        """
-        target_url can be a board name or free-text query.
-        Supported boards: remoteok, weworkremotely, indeed, remotive, arbeitnow, jobicy, all
+        """Collect and rank job-board records for one board or many queries.
+
+        When ``target_url`` is ``all``, every supplied keyword participates in
+        retrieval and intent classification. Results are deduplicated across
+        boards, with title-level matches ranked ahead of description-only
+        matches and service categories interleaved to reduce single-category
+        dominance.
         """
         keywords = keywords or []
-        query = target_url.strip().lower()
+        query = (target_url or "").strip().lower()
         results: List[CommentResult] = []
 
         if query in ("all", "jobs", ""):
-            # Aggregate supported free/public boards.
-            # Prefer RuffNeck service-intent jobs and balance results across
-            # boards instead of allowing the first board to consume the limit.
             boards = [
                 ("remoteok", self._remoteok),
                 ("remotive", self._remotive),
@@ -660,40 +661,122 @@ class JobBoardScraper(BaseScraper):
                 ("jobicy", self._jobicy),
                 ("weworkremotely", self._weworkremotely),
             ]
+            board_order = {name: index for index, (name, _) in enumerate(boards)}
 
-            requested_query = keywords[0] if keywords else ""
-            expanded_keywords = self._expand_job_query(requested_query)
+            # Keep every distinct requested query. Previously only keywords[0]
+            # was used, so the daily discovery list effectively searched for
+            # marketing and ignored most of the other service categories.
+            requested_queries: List[str] = []
+            seen_queries = set()
+            for value in keywords:
+                value = re.sub(r"\s+", " ", str(value or "").strip())
+                normalized = value.casefold()
+                if value and normalized not in seen_queries:
+                    requested_queries.append(value)
+                    seen_queries.add(normalized)
+
+            # Fetch once per board using the union of all requested terms and
+            # their existing expansions. This avoids one HTTP request per
+            # keyword while allowing every service category to participate.
+            expanded_keywords: List[str] = []
+            seen_expansions = set()
+            for requested_query in requested_queries:
+                for term in self._expand_job_query(requested_query):
+                    term = re.sub(r"\s+", " ", str(term or "").strip())
+                    normalized = term.casefold()
+                    if term and normalized not in seen_expansions:
+                        expanded_keywords.append(term)
+                        seen_expansions.add(normalized)
 
             logger.debug(
                 "Job query expansion: %s -> %s",
-                requested_query,
+                requested_queries,
                 expanded_keywords,
             )
 
+            # Each board used to stop at the final requested result count. Pull
+            # a larger bounded candidate pool so one early category does not
+            # exhaust every board before other categories can be considered.
+            requested_limit = max(1, int(self.max_results or 1))
+            fetch_limit = min(max(requested_limit * 3, requested_limit), 120)
             board_results = []
+            try:
+                self.max_results = fetch_limit
+                for board_name, board_fn in boards:
+                    try:
+                        board_items = board_fn(expanded_keywords)
+                        board_results.append((board_name, board_items or []))
+                    except Exception as exc:
+                        logger.debug("Job board %s failed: %s", board_name, exc)
+            finally:
+                self.max_results = requested_limit
 
-            for board_name, board_fn in boards:
-                try:
-                    board_items = board_fn(expanded_keywords)
-                    board_results.append((board_name, board_items))
-                except Exception as e:
-                    logger.debug(
-                        f"Job board {board_name} failed: {e}"
-                    )
+            def canonical_job_key(item: CommentResult) -> str:
+                """Build a stable dedupe key without removing job ID params."""
+                for candidate_url in (item.post_url, item.profile_url):
+                    candidate_url = str(candidate_url or "").strip()
+                    if not candidate_url:
+                        continue
+                    try:
+                        parts = urlsplit(candidate_url)
+                        if not parts.netloc:
+                            continue
+                        host = (parts.hostname or "").casefold()
+                        if host.startswith("www."):
+                            host = host[4:]
+                        if not host:
+                            continue
+                        # Drop tracking-only parameters, but preserve IDs such
+                        # as job keys that distinguish separate vacancies.
+                        tracking = {
+                            "utm_source", "utm_medium", "utm_campaign",
+                            "utm_term", "utm_content", "fbclid", "gclid",
+                            "mc_cid", "mc_eid", "referrer", "source",
+                        }
+                        params = [
+                            (key, value)
+                            for key, value in parse_qsl(parts.query, keep_blank_values=True)
+                            if key.casefold() not in tracking
+                        ]
+                        normalized_query = urlencode(sorted(params))
+                        path = parts.path.rstrip("/") or "/"
+                        return "url:" + urlunsplit(("https", host, path, normalized_query, ""))
+                    except (TypeError, ValueError):
+                        continue
 
-            # Classify each result against the actual requested service/query.
-            # General job intent remains available, but query intent controls
-            # prioritization for the current discovery request.
-            high_intent = []
-            query_medium = []
-            remaining = []
+                company = re.sub(
+                    r"[^a-z0-9]+", " ",
+                    str(item.username or item.display_name or "").casefold(),
+                ).strip()
+                title = str(
+                    (item.engagement or {}).get("job_title")
+                    or item.display_name
+                    or (item.comment_text or "").split(":", 1)[0]
+                ).casefold()
+                location = str(item.bio_text or "").casefold().strip()
+                if company or title:
+                    return "fallback:" + "|".join((company, title, location))
+                source = str((item.engagement or {}).get("source") or "").casefold()
+                text_key = re.sub(r"\s+", " ", str(item.comment_text or "").casefold()).strip()
+                return "fallback:" + "|".join((source, text_key[:240]))
 
+            def intent_rank(level: str) -> int:
+                return {"high": 2, "medium": 1, "low": 0}.get(
+                    str(level or "low").lower(), 0
+                )
+
+            candidates_by_key = {}
             for board_name, items in board_results:
                 for item in items:
                     engagement = dict(item.engagement or {})
-
                     raw = item.raw or {}
-
+                    title = (
+                        engagement.get("job_title")
+                        or raw.get("position")
+                        or raw.get("title")
+                        or item.display_name
+                        or ""
+                    )
                     full_description = (
                         raw.get("description")
                         or raw.get("jobDescription")
@@ -703,66 +786,181 @@ class JobBoardScraper(BaseScraper):
                         or item.comment_text
                         or ""
                     )
+                    tags = engagement.get("tags") or raw.get("tags") or []
 
-                    query_intent = self._classify_query_intent(
-                        query=requested_query,
-                        title=engagement.get("job_title") or item.display_name or "",
-                        description=full_description,
-                        tags=engagement.get("tags") or [],
+                    query_matches = []
+                    if requested_queries:
+                        for query_index, requested_query in enumerate(requested_queries):
+                            intent = self._classify_query_intent(
+                                query=requested_query,
+                                title=title,
+                                description=full_description,
+                                tags=tags,
+                            )
+                            level = str(intent.get("query_intent_level") or "low").lower()
+                            # Low-level matches include incidental terms and
+                            # explicitly weak signals (e.g. optional Excel).
+                            if intent.get("query_match") and level in ("high", "medium"):
+                                query_matches.append({
+                                    "query": requested_query,
+                                    "query_index": query_index,
+                                    "intent": intent,
+                                    "rank": intent_rank(level),
+                                })
+
+                        # Do not let broad keyword retrieval reintroduce jobs
+                        # that failed the stricter title/intent classification.
+                        if not query_matches:
+                            continue
+
+                        query_matches.sort(
+                            key=lambda match: (
+                                match["rank"],
+                                bool(match["intent"].get("query_intent_category")),
+                                len(match["query"]),
+                                -match["query_index"],
+                            ),
+                            reverse=True,
+                        )
+                        best_match = query_matches[0]
+                        best_intent = dict(best_match["intent"])
+                        best_level = str(best_intent.get("query_intent_level") or "low")
+                        matched_queries = list(dict.fromkeys(
+                            match["query"] for match in sorted(
+                                query_matches, key=lambda match: match["query_index"]
+                            )
+                        ))
+                        matched_categories = list(dict.fromkeys(
+                            match["intent"].get("query_intent_category")
+                            or engagement.get("job_intent_category")
+                            for match in query_matches
+                            if (
+                                match["intent"].get("query_intent_category")
+                                or engagement.get("job_intent_category")
+                            )
+                        ))
+                        category = (
+                            best_intent.get("query_intent_category")
+                            or engagement.get("job_intent_category")
+                            or best_match["query"]
+                        )
+                        engagement.update(best_intent)
+                        engagement.update({
+                            "query_match": True,
+                            "query_intent_level": best_level,
+                            "query_intent_category": category,
+                            "discovery_query": best_match["query"],
+                            "matched_queries": matched_queries,
+                            "matching_service_categories": matched_categories,
+                        })
+                        score = intent_rank(best_level)
+                        query_index = min(match["query_index"] for match in query_matches)
+                    else:
+                        # Preserve general-board behavior when no keywords are
+                        # supplied: relevant jobs first, then other listings.
+                        level = str(engagement.get("job_intent_level") or "low").lower()
+                        category = engagement.get("job_intent_category") or "other"
+                        engagement.update({
+                            "query_match": False,
+                            "query_intent_level": level,
+                            "query_intent_category": category,
+                            "discovery_query": "",
+                            "matched_queries": [],
+                            "matching_service_categories": (
+                                [category] if category != "other" else []
+                            ),
+                        })
+                        score = intent_rank(level)
+                        query_index = len(requested_queries)
+
+                    item.engagement = engagement
+                    dedupe_key = canonical_job_key(item)
+                    candidate = {
+                        "item": item,
+                        "board": board_name,
+                        "score": score,
+                        "category": str(category or "other"),
+                        "query_index": query_index,
+                    }
+
+                    previous = candidates_by_key.get(dedupe_key)
+                    if previous is None:
+                        candidates_by_key[dedupe_key] = candidate
+                        continue
+
+                    # Keep the best-scoring representation of a duplicate and
+                    # merge the query/category evidence gathered from both.
+                    previous_item = previous["item"]
+                    previous_engagement = dict(previous_item.engagement or {})
+                    incoming_engagement = dict(item.engagement or {})
+                    merged_queries = list(dict.fromkeys(
+                        (previous_engagement.get("matched_queries") or [])
+                        + (incoming_engagement.get("matched_queries") or [])
+                    ))
+                    merged_categories = list(dict.fromkeys(
+                        (previous_engagement.get("matching_service_categories") or [])
+                        + (incoming_engagement.get("matching_service_categories") or [])
+                    ))
+                    if candidate["score"] > previous["score"]:
+                        winner = candidate
+                        winner_engagement = dict(item.engagement or {})
+                    else:
+                        winner = previous
+                        winner_engagement = previous_engagement
+                    winner_engagement["matched_queries"] = merged_queries
+                    winner_engagement["matching_service_categories"] = merged_categories
+                    winner["item"].engagement = winner_engagement
+                    winner["query_index"] = min(
+                        previous["query_index"], candidate["query_index"]
+                    )
+                    candidates_by_key[dedupe_key] = winner
+
+            candidates = list(candidates_by_key.values())
+
+            # Interleave categories within each confidence tier. This prevents
+            # the first few marketing listings from crowding out data, design,
+            # development, AI, and administration results.
+            ordered = []
+            tiers = (2, 1) if requested_queries else (2, 1, 0)
+            for tier in tiers:
+                eligible = [candidate for candidate in candidates if candidate["score"] == tier]
+                category_pools = {}
+                category_first_seen = {}
+                for candidate in eligible:
+                    category = candidate["category"] or "other"
+                    category_pools.setdefault(category, []).append(candidate)
+                    category_first_seen[category] = min(
+                        category_first_seen.get(category, candidate["query_index"]),
+                        candidate["query_index"],
                     )
 
-                    engagement.update(query_intent)
-                    item.engagement = engagement
+                categories = sorted(
+                    category_pools,
+                    key=lambda category: (category_first_seen[category], category),
+                )
+                for category in categories:
+                    category_pools[category].sort(
+                        key=lambda candidate: (
+                            board_order.get(candidate["board"], 999),
+                            candidate["query_index"],
+                        )
+                    )
 
-                    if query_intent["query_intent_level"] == "high":
-                        high_intent.append(item)
-                    elif query_intent["query_intent_level"] == "medium":
-                        query_medium.append(item)
-                    else:
-                        remaining.append(item)
+                while len(ordered) < requested_limit and any(category_pools.values()):
+                    for category in categories:
+                        pool = category_pools.get(category) or []
+                        if pool:
+                            ordered.append(pool.pop(0))
+                            if len(ordered) >= requested_limit:
+                                break
 
-            # Round-robin high query-intent jobs by board.
-            ordered = []
-            pools = {}
+                if len(ordered) >= requested_limit:
+                    break
 
-            for board_name, items in board_results:
-                pools[board_name] = [
-                    item for item in items
-                    if item in high_intent
-                ]
+            results = [candidate["item"] for candidate in ordered]
 
-            while any(pools.values()) and len(ordered) < self.max_results:
-                for board_name, _ in board_results:
-                    pool = pools.get(board_name) or []
-                    if pool:
-                        ordered.append(pool.pop(0))
-                        if len(ordered) >= self.max_results:
-                            break
-
-            # Prefer medium query-intent results before unrelated records.
-            if len(ordered) < self.max_results:
-                for item in query_medium:
-                    if item not in ordered:
-                        ordered.append(item)
-                    if len(ordered) >= self.max_results:
-                        break
-
-            # For a specific keyword/service query, do not pad the result set
-            # with unrelated low-intent jobs. Only return jobs that matched
-            # the requested query at high or medium intent.
-            #
-            # For an empty query, retain the general-result fallback.
-            if not requested_query and len(ordered) < self.max_results:
-                for item in remaining:
-                    if item not in ordered:
-                        ordered.append(item)
-                    if len(ordered) >= self.max_results:
-                        break
-
-            results = ordered
-
-            # Indeed is intentionally not part of the default aggregate.
-            # Its HTML endpoint is more likely to block automated requests.
+            # Indeed is intentionally not part of the default aggregate because
+            # its HTML endpoint is more likely to block automated requests.
         elif query in ("remoteok", "remote ok"):
             results = self._remoteok(keywords)
         elif query in ("weworkremotely", "wwr", "we work remotely"):
@@ -774,17 +972,19 @@ class JobBoardScraper(BaseScraper):
         elif query in ("jobicy",):
             results = self._jobicy(keywords)
         elif query.startswith("indeed") or "indeed.com" in query:
-            results = self._indeed(query if "indeed.com" in query else " ".join(keywords) or "developer")
+            results = self._indeed(
+                query if "indeed.com" in query else " ".join(keywords) or "developer"
+            )
         else:
-            # Treat as keyword search across RemoteOK + Remotive
-            results = self._remoteok([target_url] + keywords)
-            results.extend(self._remotive([target_url] + keywords))
+            # Treat a direct free-text target as another keyword, rather than
+            # dropping any additional supplied terms.
+            free_text_keywords = [target_url] + keywords
+            results = self._remoteok(free_text_keywords)
+            results.extend(self._remotive(free_text_keywords))
 
-        # Individual job-board methods already apply keyword filtering
-        # against the full job title/description. Do not run the generic
-        # BaseScraper filter again because CommentResult.comment_text is
-        # intentionally truncated for storage/display.
-        return results[: self.max_results]
+        # Individual job-board methods already filter against full job text.
+        # Avoid the generic BaseScraper filter because comment_text is truncated.
+        return results[: max(1, int(self.max_results or 1))]
 
     def _remoteok(self, keywords: List[str]) -> List[CommentResult]:
         try:
@@ -837,7 +1037,7 @@ class JobBoardScraper(BaseScraper):
             return []
 
     def _remotive(self, keywords: List[str]) -> List[CommentResult]:
-        """Remotive public API â€“ free."""
+        """Remotive public API – free."""
         try:
             resp = requests.get(
                 "https://remotive.com/api/remote-jobs",
@@ -889,7 +1089,7 @@ class JobBoardScraper(BaseScraper):
             return []
 
     def _arbeitnow(self, keywords: List[str]) -> List[CommentResult]:
-        """Arbeitnow public job API â€“ free."""
+        """Arbeitnow public job API – free."""
         try:
             resp = requests.get(
                 "https://www.arbeitnow.com/api/job-board-api",
@@ -938,7 +1138,7 @@ class JobBoardScraper(BaseScraper):
             return []
 
     def _jobicy(self, keywords: List[str]) -> List[CommentResult]:
-        """Jobicy public API â€“ free remote jobs."""
+        """Jobicy public API – free remote jobs."""
         try:
             resp = requests.get(
                 "https://jobicy.com/api/v2/remote-jobs",
@@ -1083,11 +1283,3 @@ class JobBoardScraper(BaseScraper):
         except Exception as e:
             logger.warning(f"Indeed failed: {e}")
             return []
-
-
-
-
-
-
-
-
