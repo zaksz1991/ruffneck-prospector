@@ -712,6 +712,24 @@ class JobBoardScraper(BaseScraper):
             score += 5
             reasons.append("Location information available")
 
+        text = (str(title or "") + " " + str(description or "")).casefold()
+        signal_patterns = {
+            "digital_marketing": ["generate leads", "marketing campaign", "social media strategy"],
+            "web_development": ["website redesign", "website development", "e-commerce website"],
+            "content_creation": ["content calendar", "content production", "content strategy"],
+            "data_analysis": ["automate reporting", "data visualization", "reporting dashboard"],
+            "administration": ["administrative support", "manage records", "document management"],
+            "ai_automation": ["automate workflows", "ai automation", "process automation"],
+        }
+        detected_signals = []
+        for service, phrases in signal_patterns.items():
+            evidence = [phrase for phrase in phrases if phrase in text]
+            if evidence:
+                detected_signals.append({"service": service, "evidence": evidence[:3]})
+        score += min(20, len(detected_signals) * 10)
+        for signal in detected_signals:
+            reasons.append("Potential need: " + signal["service"].replace("_", " "))
+
         score = min(100, score)
         if score >= 75:
             quality = "high"
@@ -726,6 +744,8 @@ class JobBoardScraper(BaseScraper):
             "lead_quality_score": score,
             "lead_quality_level": quality,
             "lead_quality_reasons": reasons,
+            "buying_signals": detected_signals,
+            "buying_signal_count": len(detected_signals),
         })
         return data
 
