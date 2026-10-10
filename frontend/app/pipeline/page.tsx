@@ -124,7 +124,7 @@ export default function PipelinePage() {
         p.profile_url,
       ]
         .filter(Boolean)
-        .join(" Â· "),
+        .join(" · "),
     });
   }
 
@@ -526,7 +526,7 @@ export default function PipelinePage() {
                           </div>
 
                           <div className="text-xs text-slate-500 capitalize mt-0.5">
-                            {p.platform} Â· Score{" "}
+                            {p.platform} · Score{" "}
                             {p.intent_score}
                           </div>
 
@@ -550,7 +550,6 @@ export default function PipelinePage() {
                             {STAGES.filter(
                               (s) => s !== stage
                             )
-                              .filter((s) => s !== stage)
                               .map((s) => (
                                 <button
                                   key={s}
