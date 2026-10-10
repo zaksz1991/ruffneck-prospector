@@ -89,7 +89,7 @@ def discover_service_leads(
     query_budget = (
         40
         if str(service or "").strip().lower() == "used_items"
-        else 6
+        else 3
     )
 
     return scraper.search_service_leads(

@@ -740,7 +740,7 @@ class GoogleSearchScraper:
     def __init__(
         self,
         max_results: int = 20,
-        timeout: int = 15,
+        timeout: int = 8,
     ):
         self.max_results = max(
             1,
@@ -833,16 +833,12 @@ class GoogleSearchScraper:
             logger.warning("DDGS package is not installed.")
             return []
 
-        requested = min(max(int(max_results), 10), 50)
+        requested = min(max(int(max_results), 5), 15)
 
+        # Limit default provider fan-out to reduce slow discovery runs.
         default_backends = (
-            "bing",
             "yahoo",
             "duckduckgo",
-            "google",
-            "brave",
-            "mojeek",
-            "startpage",
         )
 
         configured_backends = os.getenv(
