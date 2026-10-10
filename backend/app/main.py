@@ -283,6 +283,66 @@ def list_workspaces(request: Request):
             detail="Unable to load workspaces. Please try again later.",
         )
 
+
+def _get_user_workspace_ids(request: Request, sb) -> set[str]:
+    """Return workspace IDs accessible to the authenticated user."""
+    authorization = request.headers.get("Authorization", "")
+    scheme, _, token = authorization.partition(" ")
+
+    if scheme.lower() != "bearer" or not token.strip():
+        raise HTTPException(status_code=401, detail="Authentication required. Please sign in again.")
+
+    try:
+        auth_result = sb.auth.get_user(token.strip())
+        user = getattr(auth_result, "user", None)
+        if not user:
+            raise HTTPException(status_code=401, detail="Your session is invalid or expired. Please sign in again.")
+        user_id = str(user.id)
+        email = (getattr(user, "email", None) or "").strip().lower()
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=401, detail="Your session could not be verified. Please sign in again.")
+
+    try:
+        workspace_ids = set()
+
+        memberships = (
+            sb.table("workspace_members")
+            .select("workspace_id")
+            .eq("user_id", user_id)
+            .eq("status", "active")
+            .execute()
+        )
+        for row in memberships.data or []:
+            if row.get("workspace_id"):
+                workspace_ids.add(str(row["workspace_id"]))
+
+        if email:
+            email_memberships = (
+                sb.table("workspace_members")
+                .select("workspace_id")
+                .eq("email", email)
+                .eq("status", "active")
+                .execute()
+            )
+            for row in email_memberships.data or []:
+                if row.get("workspace_id"):
+                    workspace_ids.add(str(row["workspace_id"]))
+
+        owned = (
+            sb.table("workspaces")
+            .select("id")
+            .eq("owner_id", user_id)
+            .execute()
+        )
+        for row in owned.data or []:
+            if row.get("id"):
+                workspace_ids.add(str(row["id"]))
+
+        return workspace_ids
+    except Exception:
+        raise HTTPException(status_code=500, detail="Unable to verify workspace access. Please try again later.")
 # ============================================================
 # HELPERS
 # ============================================================
@@ -396,6 +456,7 @@ class OutreachRequest(BaseModel):
 class PipelineMoveRequest(BaseModel):
     prospect_id: str
     stage: str
+    workspace_id: Optional[str] = None
 
 
 class ReplyLogRequest(BaseModel):
@@ -791,111 +852,74 @@ def get_prospects(
 
 @app.get("/api/pipeline")
 def get_pipeline(
+    request: Request,
     workspace_id: Optional[str] = None,
 ):
     try:
-        sb = get_supabase()
-
-        query = (
-            sb.table("prospects")
-            .select("*")
-            .order("created_at", desc=True)
-            .limit(1000)
-        )
-
-        if workspace_id:
-            query = query.eq(
-                "workspace_id",
-                workspace_id,
+        authorization = request.headers.get("Authorization", "")
+        scheme, _, token = authorization.partition(" ")
+        if scheme.lower() != "bearer" or not token.strip():
+            raise HTTPException(
+                status_code=401,
+                detail="Authentication required. Please sign in again.",
             )
 
-        result = query.execute()
-        rows = result.data or []
+        sb = get_supabase()
+        accessible_workspace_ids = _get_user_workspace_ids(request, sb)
 
-        board = {
-            stage: []
-            for stage in PIPELINE_STAGES
-        }
+        if workspace_id:
+            if workspace_id not in accessible_workspace_ids:
+                raise HTTPException(status_code=403, detail="You do not have access to this workspace.")
+            selected_workspace_ids = {workspace_id}
+        else:
+            selected_workspace_ids = accessible_workspace_ids
 
-        for prospect in rows:
-            status = str(
-                prospect.get("status") or "new"
-            ).lower()
+        board = {stage: [] for stage in PIPELINE_STAGES}
+        if not selected_workspace_ids:
+            return {"board": board}
 
-            if status in (
-                "new",
-                "enriched",
-                "scored",
-            ):
+        result = (
+            sb.table("prospects")
+            .select("*")
+            .in_("workspace_id", sorted(selected_workspace_ids))
+            .order("created_at", desc=True)
+            .limit(1000)
+            .execute()
+        )
+
+        for prospect in result.data or []:
+            status = str(prospect.get("status") or "new").lower()
+
+            if status in ("new", "enriched", "scored"):
                 metadata = prospect.get("metadata") or {}
-                platform = str(
-                    prospect.get("platform") or ""
-                ).lower()
-
-                tags = {
-                    str(tag).strip().lower()
-                    for tag in (prospect.get("tags") or [])
-                }
-
-                query_service = str(
-                    metadata.get("query_service") or ""
-                ).lower()
-
-                page_type = str(
-                    metadata.get("page_type") or ""
-                ).lower()
+                platform = str(prospect.get("platform") or "").lower()
+                tags = {str(tag).strip().lower() for tag in (prospect.get("tags") or [])}
+                query_service = str(metadata.get("query_service") or "").lower()
+                page_type = str(metadata.get("page_type") or "").lower()
 
                 try:
-                    score = float(
-                        prospect.get("intent_score") or 0
-                    )
+                    score = float(prospect.get("intent_score") or 0)
                 except (TypeError, ValueError):
                     score = 0.0
 
                 is_competitor = "competitor" in tags
                 is_job = platform == "jobs"
-
-                is_buying_intent = (
-                    query_service == "buying_intent"
-                    or "buying_intent" in tags
-                )
-
+                is_buying_intent = query_service == "buying_intent" or "buying_intent" in tags
                 is_sales_qualified = (
-                    (
-                        is_buying_intent
-                        and (
-                            page_type == "opportunity"
-                            or score > 0
-                        )
-                    )
+                    (is_buying_intent and (page_type == "opportunity" or score > 0))
                     or score >= 70
                 )
-
-                is_qualifying = (
-                    not is_competitor
-                    and not is_job
-                    and is_sales_qualified
-                )
-
-                if is_qualifying:
+                if not is_competitor and not is_job and is_sales_qualified:
                     board["new"].append(prospect)
 
             elif status in PIPELINE_STAGES:
                 board[status].append(prospect)
 
-        return {
-            "board": board,
-        }
-
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=str(e),
-        )
-
-
-# ============================================================
-
+        return {"board": board}
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=500, detail="Unable to load pipeline. Please try again later.")
 @app.post("/api/replies/check")
 def check_replies_endpoint(since_hours: int = 48):
     """Queue the Gmail reply-check worker."""
@@ -1441,48 +1465,45 @@ def mark_notifications_read(data: NotificationReadRequest):
 # ============================================================
 
 @app.get("/api/prospects/{prospect_id}/activities")
-def get_prospect_activities(prospect_id: str, limit: int = 50):
+def get_prospect_activities(
+    prospect_id: str,
+    request: Request,
+    limit: int = 50,
+):
     try:
+        authorization = request.headers.get("Authorization", "")
+        scheme, _, token = authorization.partition(" ")
+        if scheme.lower() != "bearer" or not token.strip():
+            raise HTTPException(
+                status_code=401,
+                detail="Authentication required. Please sign in again.",
+            )
+
         sb = get_supabase()
+        accessible_workspace_ids = _get_user_workspace_ids(request, sb)
 
         prospect_result = (
             sb.table("prospects")
-            .select("id")
+            .select("id,workspace_id")
             .eq("id", prospect_id)
             .limit(1)
             .execute()
         )
+        prospects = prospect_result.data or []
+        if not prospects:
+            raise HTTPException(status_code=404, detail="Prospect not found.")
 
-        if not (prospect_result.data or []):
-            raise HTTPException(
-                status_code=404,
-                detail="Prospect not found",
-            )
+        workspace_id = prospects[0].get("workspace_id")
+        if not workspace_id or str(workspace_id) not in accessible_workspace_ids:
+            raise HTTPException(status_code=403, detail="You do not have access to this prospect.")
 
         from .activity import list_activities
-
-        activities = list_activities(
-            sb,
-            prospect_id,
-            limit=max(1, min(int(limit), 200)),
-        )
-
-        return {
-            "activities": activities,
-            "count": len(activities),
-            "prospect_id": prospect_id,
-        }
-
+        activities = list_activities(sb, prospect_id, limit=max(1, min(int(limit), 200)))
+        return {"activities": activities, "count": len(activities), "prospect_id": prospect_id}
     except HTTPException:
         raise
-
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=str(e),
-        )
-
-
+    except Exception:
+        raise HTTPException(status_code=500, detail="Unable to load prospect activities. Please try again later.")
 # ============================================================
 # LINKEDIN PROFILE
 # ============================================================
@@ -1595,25 +1616,53 @@ def log_reply(data: ReplyLogRequest):
 # ============================================================
 
 @app.post("/api/pipeline/move")
-def move_pipeline(data: PipelineMoveRequest):
+def move_pipeline(data: PipelineMoveRequest, request: Request):
     if data.stage not in PIPELINE_STAGES:
         raise HTTPException(
             status_code=400,
-            detail={
-                "message": "Invalid pipeline stage",
-                "allowed_stages": PIPELINE_STAGES,
-            },
+            detail={"message": "Invalid pipeline stage", "allowed_stages": PIPELINE_STAGES},
         )
 
     try:
+        authorization = request.headers.get("Authorization", "")
+        scheme, _, token = authorization.partition(" ")
+        if scheme.lower() != "bearer" or not token.strip():
+            raise HTTPException(
+                status_code=401,
+                detail="Authentication required. Please sign in again.",
+            )
+
         sb = get_supabase()
+        accessible_workspace_ids = _get_user_workspace_ids(request, sb)
+
+        prospect_result = (
+            sb.table("prospects")
+            .select("id,workspace_id")
+            .eq("id", data.prospect_id)
+            .limit(1)
+            .execute()
+        )
+        prospects = prospect_result.data or []
+        if not prospects:
+            raise HTTPException(status_code=404, detail="Prospect not found.")
+
+        workspace_id = prospects[0].get("workspace_id")
+        if not workspace_id or str(workspace_id) not in accessible_workspace_ids:
+            raise HTTPException(status_code=403, detail="You do not have access to this prospect.")
+
+        workspace_id = str(workspace_id)
+        if data.workspace_id and data.workspace_id != workspace_id:
+            raise HTTPException(status_code=403, detail="The prospect does not belong to the selected workspace.")
 
         result = (
             sb.table("prospects")
             .update({"status": data.stage})
             .eq("id", data.prospect_id)
+            .eq("workspace_id", workspace_id)
             .execute()
         )
+        if not (result.data or []):
+            raise HTTPException(status_code=404, detail="Prospect could not be updated.")
 
         return {
             "status": "moved",
@@ -1621,14 +1670,10 @@ def move_pipeline(data: PipelineMoveRequest):
             "stage": data.stage,
             "data": result.data or [],
         }
-
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=str(e),
-        )
-
-
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=500, detail="Unable to move this prospect. Please try again later.")
 # ============================================================
 # DAILY DISCOVERY
 # ============================================================

@@ -58,25 +58,48 @@ export default function PipelinePage() {
       const res = await apiFetch(`/api/pipeline${q}`);
       const data = await res.json();
 
+      if (!res.ok) {
+        throw new Error(
+          data.detail || data.message || "Unable to load the pipeline."
+        );
+      }
+
       setBoard(data.board || {});
     } catch (e) {
-      console.error(e);
+      console.error("Pipeline load failed:", e);
+      alert(e instanceof Error ? e.message : "Unable to load the pipeline.");
     } finally {
       setLoading(false);
     }
   }
 
   async function moveTo(prospectId: string, stage: string) {
-    await apiFetch(`/api/pipeline/move`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        prospect_id: prospectId,
-        stage,
-      }),
-    });
+    try {
+      const workspaceId = getActiveWorkspaceId();
 
-    load();
+      const res = await apiFetch(`/api/pipeline/move`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prospect_id: prospectId,
+          stage,
+          workspace_id: workspaceId,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(
+          data.detail || data.message || "Unable to move this prospect."
+        );
+      }
+
+      await load();
+    } catch (e) {
+      console.error("Pipeline move failed:", e);
+      alert(e instanceof Error ? e.message : "Unable to move this prospect.");
+    }
   }
 
   function openGuide(p: any) {
@@ -296,14 +319,22 @@ export default function PipelinePage() {
 
     try {
       const res = await apiFetch(
-        `/api/prospects/${prospectId}/activities`
+        `/api/prospects/${encodeURIComponent(prospectId)}/activities`
       );
 
       const data = await res.json();
 
+      if (!res.ok) {
+        throw new Error(
+          data.detail || data.message || "Unable to load prospect activities."
+        );
+      }
+
       setTimeline(data.activities || []);
-    } catch {
+    } catch (e) {
+      console.error("Activity timeline failed:", e);
       setTimeline([]);
+      alert(e instanceof Error ? e.message : "Unable to load prospect activities.");
     }
   }
 
