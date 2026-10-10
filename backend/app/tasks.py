@@ -36,7 +36,7 @@ if not REDIS_URL.startswith(("redis://", "rediss://")):
 celery_app = Celery(
     "ruffneck",
     broker=REDIS_URL,
-    backend=REDIS_URL,
+    backend=REDIS_URL + ("&" if "?" in REDIS_URL else "?") + "ssl_cert_reqs=required",
 )
 
 celery_app.conf.update(
@@ -3283,6 +3283,7 @@ def _maybe_notify_high_score(
 
     except Exception:
         pass
+
 
 
 
