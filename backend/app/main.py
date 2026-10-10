@@ -85,6 +85,115 @@ def get_supabase():
 
 
 # ============================================================
+# WORKSPACES
+# ============================================================
+
+@app.get("/api/workspaces")
+def list_workspaces(request: Request):
+    """Return active workspaces accessible to the authenticated user."""
+    authorization = request.headers.get("Authorization", "")
+    scheme, _, token = authorization.partition(" ")
+
+    if scheme.lower() != "bearer" or not token.strip():
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication required. Please sign in again.",
+        )
+
+    try:
+        sb = get_supabase()
+        auth_result = sb.auth.get_user(token.strip())
+        user = getattr(auth_result, "user", None)
+
+        if not user:
+            raise HTTPException(
+                status_code=401,
+                detail="Your session is invalid or expired. Please sign in again.",
+            )
+
+        user_id = str(user.id)
+        email = (getattr(user, "email", None) or "").strip().lower()
+
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(
+            status_code=401,
+            detail="Your session could not be verified. Please sign in again.",
+        )
+
+    try:
+        workspace_ids = set()
+
+        # Include workspaces where this user has an active membership.
+        memberships = (
+            sb.table("workspace_members")
+            .select("workspace_id")
+            .eq("user_id", user_id)
+            .eq("status", "active")
+            .execute()
+        )
+
+        for row in (memberships.data or []):
+            if row.get("workspace_id"):
+                workspace_ids.add(str(row["workspace_id"]))
+
+        # Support active memberships created by email invitation.
+        if email:
+            email_memberships = (
+                sb.table("workspace_members")
+                .select("workspace_id")
+                .eq("email", email)
+                .eq("status", "active")
+                .execute()
+            )
+
+            for row in (email_memberships.data or []):
+                if row.get("workspace_id"):
+                    workspace_ids.add(str(row["workspace_id"]))
+
+        # Include workspaces owned by this user, even if an older
+        # database record has no corresponding membership row.
+        owned = (
+            sb.table("workspaces")
+            .select("id")
+            .eq("owner_id", user_id)
+            .execute()
+        )
+
+        for row in (owned.data or []):
+            if row.get("id"):
+                workspace_ids.add(str(row["id"]))
+
+        if not workspace_ids:
+            return {"workspaces": []}
+
+        result = (
+            sb.table("workspaces")
+            .select("id,name,slug")
+            .in_("id", sorted(workspace_ids))
+            .order("name")
+            .execute()
+        )
+
+        return {
+            "workspaces": [
+                {
+                    "id": str(row["id"]),
+                    "name": str(row.get("name") or "Untitled workspace"),
+                    "slug": row.get("slug"),
+                }
+                for row in (result.data or [])
+            ]
+        }
+
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to load workspaces. Please try again later.",
+        )
+
+# ============================================================
 # HELPERS
 # ============================================================
 

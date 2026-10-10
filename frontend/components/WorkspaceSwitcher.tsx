@@ -13,10 +13,27 @@ export default function WorkspaceSwitcher() {
   useEffect(() => {
     setActiveId(getActiveWorkspaceId());
     setActiveName(getActiveWorkspaceName());
-    fetch(`${API}/api/workspaces`)
-      .then((r) => r.json())
-      .then((d) => setWorkspaces(d.workspaces || []))
-      .catch(() => {});
+    fetch(`${API}/api/workspaces`, {
+      headers: (() => {
+        const headers: Record<string, string> = {};
+        const token = localStorage.getItem("ruffneck_token");
+        if (token) {
+          headers["Authorization"] = `Bearer ${token}`;
+        }
+        return headers;
+      })(),
+    })
+      .then((r) => {
+        if (!r.ok) {
+          throw new Error(`Workspace request failed (${r.status})`);
+        }
+        return r.json();
+      })
+      .then((d) => setWorkspaces(Array.isArray(d.workspaces) ? d.workspaces : []))
+      .catch((error) => {
+        console.error("Unable to load workspaces:", error);
+        setWorkspaces([]);
+      });
   }, []);
 
   function onChange(e: React.ChangeEvent<HTMLSelectElement>) {

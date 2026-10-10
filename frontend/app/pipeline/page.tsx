@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import NotificationBell from "../../components/NotificationBell";
 import WorkspaceSwitcher from "../../components/WorkspaceSwitcher";
@@ -101,7 +101,7 @@ export default function PipelinePage() {
         p.profile_url,
       ]
         .filter(Boolean)
-        .join(" · "),
+        .join(" Â· "),
     });
   }
 
@@ -245,7 +245,7 @@ export default function PipelinePage() {
     } catch (e: any) {
       alert(
         e.message ||
-          "Audit failed – prospect needs a website URL"
+          "Audit failed â€“ prospect needs a website URL"
       );
     } finally {
       setAuditLoading(null);
@@ -422,7 +422,7 @@ export default function PipelinePage() {
               className="text-sm bg-emerald-800 px-3 py-1.5 rounded disabled:opacity-50"
             >
               {checkingReplies
-                ? "Checking…"
+                ? "Checkingâ€¦"
                 : "Check Replies"}
             </button>
 
@@ -437,7 +437,7 @@ export default function PipelinePage() {
 
         {loading ? (
           <p className="text-slate-400">
-            Loading pipeline…
+            Loading pipelineâ€¦
           </p>
         ) : (
           <>
@@ -495,7 +495,7 @@ export default function PipelinePage() {
                           </div>
 
                           <div className="text-xs text-slate-500 capitalize mt-0.5">
-                            {p.platform} · Score{" "}
+                            {p.platform} Â· Score{" "}
                             {p.intent_score}
                           </div>
 
@@ -507,7 +507,7 @@ export default function PipelinePage() {
 
                           {p.assigned_to && (
                             <div className="text-xs text-amber-400/90 mt-0.5">
-                              → {p.assigned_to}
+                              â†’ {p.assigned_to}
                             </div>
                           )}
 
@@ -531,7 +531,7 @@ export default function PipelinePage() {
                                   }
                                   className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 capitalize"
                                 >
-                                  → {s}
+                                  â†’ {s}
                                 </button>
                               ))}
 
@@ -570,7 +570,7 @@ export default function PipelinePage() {
                                     value=""
                                     disabled
                                   >
-                                    Enroll…
+                                    Enrollâ€¦
                                   </option>
 
                                   {sequences.map(
@@ -624,7 +624,7 @@ export default function PipelinePage() {
                               className="text-[10px] px-1.5 py-0.5 rounded bg-amber-900/40 text-amber-300 disabled:opacity-50"
                             >
                               {auditLoading === p.id
-                                ? "…"
+                                ? "â€¦"
                                 : "Audit"}
                             </button>
                           </div>
@@ -686,7 +686,7 @@ export default function PipelinePage() {
                 ).map((field) => (
                   <div key={field}>
                     <label className="block text-[10px] text-slate-500 mb-0.5 capitalize">
-                      {field.replace("_", " ")}
+                      {String(field).replace("_", " ")}
                     </label>
 
                     {field === "goals" ||
@@ -739,7 +739,7 @@ export default function PipelinePage() {
                   className="w-full bg-teal-700 hover:bg-teal-600 disabled:opacity-50 py-2.5 rounded-lg text-sm font-medium"
                 >
                   {guideLoading
-                    ? "Generating…"
+                    ? "Generatingâ€¦"
                     : "Generate & download PDF"}
                 </button>
               </form>

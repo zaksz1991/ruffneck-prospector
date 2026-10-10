@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import NotificationBell from "../../components/NotificationBell";
 import WorkspaceSwitcher from "../../components/WorkspaceSwitcher";
@@ -413,7 +413,7 @@ export default function ProspectsPage() {
 
     return (
       <span className="text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-500">
-        —
+        â€”
       </span>
     );
   }
@@ -574,7 +574,7 @@ export default function ProspectsPage() {
               className="bg-blue-700 hover:bg-blue-600 disabled:opacity-50 px-4 py-2 rounded text-sm font-medium"
             >
               {scoring
-                ? "AI Scoring…"
+                ? "AI Scoringâ€¦"
                 : "AI Score visible"}
             </button>
             <button
@@ -584,7 +584,7 @@ export default function ProspectsPage() {
               title="Automatically find and enrich prospects that still need email / domain data"
             >
               {autoEnriching
-                ? "Auto-enriching…"
+                ? "Auto-enrichingâ€¦"
                 : "Auto-Enrich New"}
             </button>
 
@@ -597,7 +597,7 @@ export default function ProspectsPage() {
               className="bg-amber-700 hover:bg-amber-600 disabled:opacity-50 px-4 py-2 rounded text-sm font-medium"
             >
               {verifying
-                ? "Verifying…"
+                ? "Verifyingâ€¦"
                 : "Verify Emails"}
             </button>
 
@@ -621,8 +621,8 @@ export default function ProspectsPage() {
               >
                 <option value="" disabled>
                   {enrolling
-                    ? "Enrolling…"
-                    : "Enroll in Sequence…"}
+                    ? "Enrollingâ€¦"
+                    : "Enroll in Sequenceâ€¦"}
                 </option>
 
                 {sequences.map((s: any) => (
@@ -645,7 +645,7 @@ export default function ProspectsPage() {
               className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 px-4 py-2 rounded text-sm font-medium flex items-center gap-2"
             >
               {exporting
-                ? "Exporting…"
+                ? "Exportingâ€¦"
                 : "Export to Excel"}
             </button>
           </div>
@@ -703,7 +703,7 @@ export default function ProspectsPage() {
 
         {loading ? (
           <p className="text-slate-400">
-            Loading…
+            Loadingâ€¦
           </p>
         ) : prospects.length === 0 ? (
           <div className="text-center py-20 text-slate-500">
@@ -807,7 +807,7 @@ export default function ProspectsPage() {
                           )}
                         </div>
                       ) : (
-                        <span className="text-slate-600">—</span>
+                        <span className="text-slate-600">â€”</span>
                       )}
                     </td>
 
@@ -857,7 +857,7 @@ export default function ProspectsPage() {
                                     key={signal}
                                     className="rounded bg-emerald-900/40 px-2 py-1 text-emerald-300"
                                   >
-                                    {signal.replace(/_/g, " ")}
+                                    {String(signal).replace(/_/g, " ")}
                                   </span>
                                 ))}
                               </div>
@@ -880,7 +880,7 @@ export default function ProspectsPage() {
                             <div
                               title={`Source: ${
                                 p.metadata?.email_source || "?"
-                              } • Confidence: ${
+                              } â€¢ Confidence: ${
                                 p.email_confidence || "?"
                               }`}
                             >
@@ -894,7 +894,7 @@ export default function ProspectsPage() {
                               className="text-emerald-400 hover:text-emerald-300"
                               title={`Phone source: ${
                                 p.metadata?.phone_source || "?"
-                              } • Confidence: ${
+                              } â€¢ Confidence: ${
                                 p.phone_confidence ||
                                 p.metadata?.phone_confidence ||
                                 "?"
@@ -906,7 +906,7 @@ export default function ProspectsPage() {
                         </div>
                       ) : (
                         <span className="text-slate-600">
-                          —
+                          â€”
                         </span>
                       )}
                     </td>

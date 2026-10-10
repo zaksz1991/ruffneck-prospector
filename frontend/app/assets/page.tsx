@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -46,7 +46,7 @@ export default function AssetsPage() {
       if (!res.ok) throw new Error(data.detail || data.reason || "Send failed");
       alert(data.status === "sent" ? `Sent to ${data.to}` : (data.reason || data.status || "Done"));
     } catch (e: any) {
-      alert(e.message || "Send failed – is SMTP configured?");
+      alert(e.message || "Send failed â€“ is SMTP configured?");
     }
   }
 
@@ -91,7 +91,7 @@ export default function AssetsPage() {
         </div>
 
         {loading ? (
-          <p className="text-slate-500">Loading…</p>
+          <p className="text-slate-500">Loadingâ€¦</p>
         ) : assets.length === 0 ? (
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-8 text-center text-slate-400 text-sm">
             No saved assets yet. Generate an ebook or implementation guide from{" "}
@@ -108,10 +108,10 @@ export default function AssetsPage() {
                 <div>
                   <div className="font-medium">{a.title || a.file_name || "Untitled"}</div>
                   <div className="text-xs text-slate-500 mt-0.5">
-                    <span className="capitalize">{(a.asset_type || "").replace("_", " ")}</span>
-                    {" · "}
+                    <span className="capitalize">{String(a.asset_type || "").replace("_", " ")}</span>
+                    {" Â· "}
                     {a.created_at ? new Date(a.created_at).toLocaleString() : ""}
-                    {a.prospect_id && " · linked to prospect"}
+                    {a.prospect_id && " Â· linked to prospect"}
                   </div>
                 </div>
                 <div className="flex gap-2">
