@@ -85,6 +85,96 @@ def get_supabase():
 
 
 # ============================================================
+# AUTHENTICATION
+# ============================================================
+
+class SignupRequest(BaseModel):
+    email: str
+    password: str = Field(..., min_length=6)
+    full_name: str = Field(..., min_length=1, max_length=120)
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+@app.post("/api/auth/signup")
+def signup(data: SignupRequest):
+    try:
+        sb = get_supabase()
+        result = sb.auth.sign_up({
+            "email": data.email.strip().lower(),
+            "password": data.password,
+            "options": {
+                "data": {"full_name": data.full_name.strip()}
+            },
+        })
+
+        user = getattr(result, "user", None)
+        session = getattr(result, "session", None)
+
+        if not user:
+            raise HTTPException(status_code=400, detail="Signup failed.")
+
+        if not session or not getattr(session, "access_token", None):
+            return {
+                "user": {
+                    "id": str(user.id),
+                    "email": user.email,
+                },
+                "access_token": None,
+                "message": "Account created. Check your email to confirm, then log in.",
+            }
+
+        return {
+            "access_token": session.access_token,
+            "user": {
+                "id": str(user.id),
+                "email": user.email,
+            },
+        }
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(
+            status_code=400,
+            detail="Signup failed. Check the email, password, and Supabase Auth configuration.",
+        )
+
+
+@app.post("/api/auth/login")
+def login(data: LoginRequest):
+    try:
+        sb = get_supabase()
+        result = sb.auth.sign_in_with_password({
+            "email": data.email.strip().lower(),
+            "password": data.password,
+        })
+
+        user = getattr(result, "user", None)
+        session = getattr(result, "session", None)
+
+        if not user or not session or not getattr(session, "access_token", None):
+            raise HTTPException(status_code=401, detail="Invalid email or password.")
+
+        return {
+            "access_token": session.access_token,
+            "user": {
+                "id": str(user.id),
+                "email": user.email,
+            },
+        }
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(
+            status_code=401,
+            detail="Login failed. Check your email, password, and email confirmation status.",
+        )
+
+
+# ============================================================
 # WORKSPACES
 # ============================================================
 
