@@ -1,5 +1,5 @@
-"""
-Celery tasks â€“ 100% free stack
+﻿"""
+Celery tasks Ã¢â‚¬â€œ 100% free stack
 LinkedIn + jobs + maps + enrichment + scoring + outreach + sequences.
 """
 
@@ -26,15 +26,25 @@ logger = logging.getLogger(__name__)
 # CELERY
 # ============================================================
 
+REDIS_URL = os.getenv("REDIS_URL", "").strip().strip('"').strip("'")
+
+if not REDIS_URL.startswith(("redis://", "rediss://")):
+    raise RuntimeError(
+        "REDIS_URL is missing or invalid. Check the Render environment variables."
+    )
+
 celery_app = Celery(
     "ruffneck",
-    broker=os.getenv(
-        "REDIS_URL",
-        "redis://localhost:6379/0",
-    ),
-    backend=os.getenv(
-        "REDIS_URL",
-        "redis://localhost:6379/0",
+    broker=REDIS_URL,
+    backend=REDIS_URL,
+)
+
+celery_app.conf.update(
+    broker_connection_retry_on_startup=True,
+    broker_use_ssl=(
+        {"ssl_cert_reqs": "required"}
+        if REDIS_URL.startswith("rediss://")
+        else None
     ),
 )
 
@@ -2582,7 +2592,7 @@ def process_due_sequences_task(
                 logger.info(
                     "Skipping enrollment "
                     f"{enroll.get('id')} "
-                    "â€“ no email on prospect"
+                    "Ã¢â‚¬â€œ no email on prospect"
                 )
 
                 (
@@ -2622,7 +2632,7 @@ def process_due_sequences_task(
 
                 logger.info(
                     f"Skipping {to_email} "
-                    "â€“ marked invalid"
+                    "Ã¢â‚¬â€œ marked invalid"
                 )
 
                 (
@@ -2654,7 +2664,7 @@ def process_due_sequences_task(
 
                 logger.info(
                     f"Skipping {to_email} "
-                    "â€“ suppressed/unsubscribed"
+                    "Ã¢â‚¬â€œ suppressed/unsubscribed"
                 )
 
                 (
@@ -3273,6 +3283,7 @@ def _maybe_notify_high_score(
 
     except Exception:
         pass
+
 
 
 
